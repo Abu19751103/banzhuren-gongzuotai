@@ -5,7 +5,7 @@
   var U = window.U, Charts = window.Charts, Store = window.Store;
   var S;
   var view = 'dashboard';
-  var ui = { query: '', examId: null, scoreTab: 'entry', pickedSeat: null, trendSid: '', recFilter: 'all', pointFilter: 'all' };
+  var ui = { query: '', examId: null, scoreTab: 'entry', pickedSeat: null, trendSid: '', recFilter: 'all', pointFilter: 'all', attMode: 'list', commentsSeed: 0, mistakeFilter: 'all' };
 
   /* ================= 基础工具 ================= */
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -144,7 +144,9 @@
     {
       group: '教学', items: [
         { id: 'scores', label: '成绩分析', icon: '◔' },
-        { id: 'teach', label: '课表与作业', icon: '▥' }
+        { id: 'teach', label: '课表与作业', icon: '▥' },
+        { id: 'mistakes', label: '错题本', icon: '✎' },
+        { id: 'comments', label: '评语生成', icon: '✦' }
       ]
     },
     {
@@ -167,6 +169,8 @@
     fees: ['班费事务', '收支流水 · 缴费状态 · 公示'],
     scores: ['成绩分析', '录入 · 统计 · 趋势 · 学业预警'],
     teach: ['课表与作业', '周课表 · 作业跟进 · 班会模板'],
+    mistakes: ['错题本', '错题归档 · 错因分析 · 订正跟踪'],
+    comments: ['评语生成', '本地智能生成 · 逐人编辑定稿 · 一键导出'],
     notices: ['通知发布', '发布通知 · 已读回执'],
     comms: ['家校沟通', '通话 · 面谈 · 会议记录'],
     records: ['工作留痕', '班会 · 安全教育 · 家访归档'],
@@ -441,6 +445,9 @@
     var h = '<div class="toolbar">' +
       '<button class="btn primary" data-act="seatRandom">随机排座</button>' +
       '<button class="btn" data-act="seatByNo">按学号排列</button>' +
+      '<button class="btn" data-act="seatGender">男女间隔</button>' +
+      '<button class="btn" data-act="seatShift">整体平移</button>' +
+      '<button class="btn" data-act="seatSpread">标签分散</button>' +
       '<button class="btn" data-act="seatClear">清空座位</button>' +
       '<button class="btn" data-act="printView">打印座位表</button>' +
       '<div class="spacer"></div><span class="small muted">点击两个座位可互换位置</span></div>';
@@ -526,19 +533,48 @@
     var absent = recs.filter(function (r) { return r.type === 'absent'; }).length;
     var leave = recs.filter(function (r) { return r.type === 'leave'; }).length;
 
+    var ATT_TYPES = [['present', '正常', ''], ['leave', '请假', 'amber'], ['late', '迟到', 'amber'], ['absent', '缺勤', 'red'], ['early', '早退', 'amber']];
+    var ATT_COLORS = { present: '#e6f4ea', leave: '#faf3dd', late: '#fdf0e0', absent: '#fcebeb', early: '#f1ecfa' };
+    var ATT_BORDER = { present: '#c9dfcf', leave: '#ecd394', late: '#efc48a', absent: '#f0b3b3', early: '#cdb8ea' };
+    var ATT_NAME = { present: '正常', leave: '请假', late: '迟到', absent: '缺勤', early: '早退' };
+
     var h = '<div class="toolbar">' +
       '<div class="field" style="min-width:160px"><input class="inp" type="date" id="attDate" value="' + date + '"></div>' +
       '<button class="btn" data-act="attAllPresent">全班到齐</button>' +
       '<div class="spacer"></div>' +
+      '<button class="btn sm ' + (ui.attMode === 'list' ? 'primary' : 'ghost') + '" data-act="attMode" data-m="list">列表点名</button>' +
+      '<button class="btn sm ' + (ui.attMode === 'seat' ? 'primary' : 'ghost') + '" data-act="attMode" data-m="seat">座位图点名</button>' +
       '<span class="bdg green">应到 ' + act.length + '</span>' +
       '<span class="bdg amber">请假 ' + leave + '</span>' +
       '<span class="bdg red">缺勤 ' + absent + '</span></div>';
 
+    if (ui.attMode === 'seat') {
+      var rows = S.settings.seatRows || 6, cols = S.settings.seatCols || 7;
+      h += '<div class="card"><div class="card-body">' +
+        '<div class="flex between center mb12"><div class="chips">' + ATT_TYPES.map(function (t) {
+          if (t[0] === 'present') return '<span class="chip" style="background:' + ATT_COLORS.present + ';border-color:' + ATT_BORDER.present + '">正常</span>';
+          return '<span class="chip" style="background:' + ATT_COLORS[t[0]] + ';border-color:' + ATT_BORDER[t[0]] + '">' + t[1] + '</span>';
+        }).join('') + '<span class="small muted" style="align-self:center;margin-left:6px">点击座位循环切换状态</span></div></div>' +
+        '<div class="podium">讲 台</div><div class="seat-grid" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))">';
+      for (var r = 0; r < rows; r++) {
+        for (var c = 0; c < cols; c++) {
+          var sp = activeStudents().find(function (x) { return x.row === r && x.col === c; });
+          if (sp) {
+            var st2 = get(sp.id);
+            h += '<div class="seat" data-act="seatAtt" data-id="' + sp.id + '" style="background:' + ATT_COLORS[st2] + ';border:1.5px solid ' + ATT_BORDER[st2] + '">' +
+              '<div class="s-name">' + esc(sp.name) + '</div><div class="s-meta">' + ATT_NAME[st2] + '</div></div>';
+          } else {
+            h += '<div class="seat empty-seat">空位</div>';
+          }
+        }
+      }
+      h += '</div></div></div>';
+    } else {
     h += '<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 250px)"><table class="tbl"><thead><tr>' +
       '<th>学号</th><th>姓名</th><th>分组</th><th>状态</th><th>说明</th></tr></thead><tbody>';
     act.forEach(function (s) {
       var cur = get(s.id);
-      var types = [['present', '正常', ''], ['leave', '请假', 'amber'], ['late', '迟到', 'amber'], ['absent', '缺勤', 'red'], ['early', '早退', 'amber']];
+      var types = ATT_TYPES;
       var reason = (recs.find(function (x) { return x.sid === s.id; }) || {}).reason || '';
       h += '<tr><td class="mono muted">' + esc(s.no) + '</td>' +
         '<td><div class="row-name"><div class="' + avatarCls(s.group) + '">' + esc(s.name.slice(0, 1)) + '</div><div style="font-weight:600">' + esc(s.name) + '</div></div></td>' +
@@ -549,6 +585,7 @@
         '<td class="small muted">' + esc(reason) + '</td></tr>';
     });
     h += '</tbody></table></div></div>';
+    }
 
     /* 本月统计 */
     var month = date.slice(0, 7);
@@ -887,14 +924,18 @@
       var total = activeStudents().length || 1;
       var rate = pct(hw.submitted.length, total);
       var graded = pct(hw.graded.length, hw.submitted.length || 1);
+      var missing = activeStudents().filter(function (s) { return hw.submitted.indexOf(s.id) === -1; });
       h += '<div style="padding:11px 0;border-bottom:1px solid #f1f3f8">' +
         '<div class="flex between center mb8"><div><span class="bdg blue">' + esc(hw.sub) + '</span> ' +
         '<b style="font-size:13px;margin-left:4px">' + esc(hw.title) + '</b></div>' +
         '<span class="small muted">' + U.fmtCn(hw.date) + '</span></div>' +
         '<div class="bar-row mb8"><span style="min-width:52px;text-align:left">提交</span><div class="bar green"><i style="width:' + rate + '%"></i></div><span>' + hw.submitted.length + '/' + total + '</span></div>' +
         '<div class="bar-row"><span style="min-width:52px;text-align:left">批改</span><div class="bar amber"><i style="width:' + graded + '%"></i></div><span>' + hw.graded.length + '/' + (hw.submitted.length || 0) + '</span></div>' +
-        (hw.graded.length < hw.submitted.length ? '<div class="right mt8"><button class="btn xs ghost" data-act="markGraded" data-id="' + hw.id + '">标记全部批改</button></div>' : '') +
-        '</div>';
+        '<div class="right mt8">' +
+        (missing.length ? '<span class="bdg red" style="margin-right:8px">未交 ' + missing.length + ' 人</span>' : '<span class="bdg green" style="margin-right:8px">已全部提交</span>') +
+        (missing.length ? '<button class="btn xs ghost" data-act="urgeHw" data-id="' + hw.id + '">催交文案</button>' : '') +
+        (hw.graded.length < hw.submitted.length ? '<button class="btn xs ghost" data-act="markGraded" data-id="' + hw.id + '">标记全部批改</button>' : '') +
+        '</div></div>';
     });
     h += '</div></div>';
 
@@ -1006,7 +1047,8 @@
       ['学生', S.students.length], ['考勤记录', S.attendance.length], ['奖惩积分', S.discipline.length],
       ['考试', S.exams.length], ['成绩明细', S.scores.length], ['待办', S.tasks.length],
       ['班费流水', S.fees.length], ['通知', S.notices.length], ['家校沟通', S.comms.length],
-      ['工作留痕', S.records.length], ['作业', S.homework.length]
+      ['工作留痕', S.records.length], ['作业', S.homework.length], ['错题', (S.mistakes || []).length],
+      ['已定稿评语', (S.savedComments || []).length]
     ];
     var kb = (Store.size() / 1024).toFixed(1);
     var h = '<div class="grid g-2-1">';
@@ -1042,11 +1084,193 @@
     return h;
   }
 
+  /* ================= 视图：错题本 ================= */
+  function vMistakes() {
+    var list = S.mistakes.slice().sort(byDateDesc);
+    var openN = list.filter(function (m) { return !m.solved; }).length;
+    var bySub = {};
+    list.forEach(function (m) { bySub[m.sub] = (bySub[m.sub] || 0) + 1; });
+    var subs = Object.keys(bySub).sort();
+
+    var h = '<div class="toolbar">' +
+      '<button class="btn primary" data-act="addMistake">＋ 记一道错题</button>' +
+      '<button class="btn" data-act="exportMistakes">导出 CSV</button>' +
+      '<div class="spacer"></div>' +
+      ['all', 'open', 'solved'].map(function (t) {
+        var lbl = { all: '全部', open: '待订正', solved: '已掌握' }[t];
+        return '<button class="btn sm ' + (ui.mistakeFilter === t ? 'primary' : 'ghost') + '" data-act="mistakeFilter" data-t="' + t + '">' + lbl + '</button>';
+      }).join('') + '</div>';
+
+    h += '<div class="grid g-2-1 mb16">';
+    h += '<div class="card"><div class="card-head"><h3>错题概览</h3><span class="sub">共 ' + list.length + ' 道 · 待订正 ' + openN + '</span></div><div class="card-body">';
+    if (subs.length) {
+      h += Charts.bar(subs.map(function (s2) {
+        return { label: s2, value: bySub[s2], color: '#e0703a' };
+      }), { height: 150 });
+    } else {
+      h += '<div class="empty"><span class="em">📒</span>还没有错题记录</div>';
+    }
+    h += '</div></div>';
+
+    var causeCnt = {};
+    list.forEach(function (m) { var c = m.cause || '未归类'; causeCnt[c] = (causeCnt[c] || 0) + 1; });
+    var topCause = Object.keys(causeCnt).sort(function (a, b) { return causeCnt[b] - causeCnt[a]; }).slice(0, 3);
+    h += '<div class="card"><div class="card-head"><h3>高频错因</h3><span class="sub">讲评优先级参考</span></div><div class="card-body">';
+    if (!topCause.length) h += '<div class="note ok"><span>暂无数据</span></div>';
+    topCause.forEach(function (c) {
+      h += '<div class="bar-row mb8"><span style="min-width:96px;text-align:left">' + esc(c) + '</span>' +
+        '<div class="bar amber"><i style="width:' + pct(causeCnt[c], list.length) + '%"></i></div><span>' + causeCnt[c] + ' 道</span></div>';
+    });
+    h += '</div></div></div>';
+
+    if (ui.mistakeFilter !== 'all') list = list.filter(function (m) { return ui.mistakeFilter === 'solved' ? m.solved : !m.solved; });
+
+    h += '<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 430px)"><table class="tbl"><thead><tr>' +
+      '<th>日期</th><th>学生</th><th>科目</th><th>题目 / 问题</th><th>错因</th><th>状态</th><th></th></tr></thead><tbody>';
+    if (!list.length) h += '<tr><td colspan="7"><div class="empty"><span class="em">✅</span>没有匹配的错题</div></td></tr>';
+    list.forEach(function (m) {
+      h += '<tr><td class="mono small">' + U.fmtCn(m.date) + '</td>' +
+        '<td style="font-weight:600">' + esc(stu(m.sid).name) + '</td>' +
+        '<td><span class="bdg line">' + esc(m.sub) + '</span></td>' +
+        '<td style="max-width:260px">' + esc(m.desc) + '</td>' +
+        '<td class="small muted">' + esc(m.cause || '—') + '</td>' +
+        '<td><button class="chip' + (m.solved ? ' on' : '') + '" data-act="toggleSolved" data-id="' + m.id + '" style="cursor:pointer">' + (m.solved ? '已掌握 ✓' : '待订正') + '</button></td>' +
+        '<td class="right"><button class="btn xs ghost danger" data-act="delMistake" data-id="' + m.id + '">删</button></td></tr>';
+    });
+    h += '</tbody></table></div></div>';
+    h += '<div class="note mt16"><span><b>用法：</b>收作业或批改时随手记下典型错题与错因，讲评课按「高频错因」定重点；学生订正后点一下状态变为「已掌握」。</span></div>';
+    return h;
+  }
+
+  /* ================= 视图：评语生成 ================= */
+  function hashStr(s) {
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+    return h;
+  }
+  function pick(pool, key) { return pool[hashStr(key) % pool.length]; }
+
+  function stuSnapshot(sid) {
+    var s = stu(sid);
+    var ats = S.attendance.filter(function (a) { return a.sid === sid; });
+    var absent = ats.filter(function (a) { return a.type === 'absent'; }).length;
+    var late = ats.filter(function (a) { return a.type === 'late'; }).length;
+    var leave = ats.filter(function (a) { return a.type === 'leave'; }).length;
+    var ds = S.discipline.filter(function (d) { return d.sid === sid; });
+    var awards = ds.filter(function (d) { return d.type === 'award'; }).length;
+    var contest = ds.filter(function (d) { return d.type === 'contest'; }).length;
+    var vio = ds.filter(function (d) { return d.type === 'violation'; }).length;
+    var talks = ds.filter(function (d) { return d.type === 'talk'; }).length;
+    var pts = pointsOf(sid);
+    var firstR = null, lastR = null, firstAvg = null, lastAvg = null;
+    if (S.exams.length) {
+      var first = S.exams[0], last = S.exams[S.exams.length - 1];
+      var rf = examRanking(first.id).find(function (x) { return x.sid === sid; });
+      var rl = examRanking(last.id).find(function (x) { return x.sid === sid; });
+      if (rf) { firstR = rf.rank; firstAvg = rf.total / (first.subjects.length || 1); }
+      if (rl) { lastR = rl.rank; lastAvg = rl.total / (last.subjects.length || 1); }
+      var best = null, worst = null;
+      (last.subjects || []).forEach(function (sub) {
+        var v = scoreOf(last.id, sid, sub);
+        if (v === null) return;
+        if (!best || v > best.v) best = { sub: sub, v: v };
+        if (!worst || v < worst.v) worst = { sub: sub, v: v };
+      });
+      var bestSub = best ? best.sub : null, worstSub = worst ? worst.sub : null;
+    }
+    return { s: s, absent: absent, late: late, leave: leave, awards: awards, contest: contest, vio: vio, talks: talks, pts: pts,
+      firstR: firstR, lastR: lastR, firstAvg: firstAvg, lastAvg: lastAvg, bestSub: bestSub, worstSub: worstSub,
+      trend: (firstR !== null && lastR !== null) ? (firstR - lastR) : (lastR !== null ? 0 : null) };
+  }
+
+  function genComment(sid, seedNo) {
+    var t = stuSnapshot(sid);
+    var g = t.s.gender === '女' ? '她' : '他';
+    var key = sid + '#' + seedNo;
+    var parts = [];
+
+    parts.push(pick([
+      '你是班级里安静而可靠的一员', '你身上有一种不急不躁的沉稳气质', '你待人真诚，同学们都愿意和你相处',
+      '你开朗热心，是小组活动里的活跃分子', '你思维敏捷，课堂上常有独到的想法', '你做事认真，交给你的任务总能让人放心'
+    ], key + 'o') + '。');
+
+    if (t.trend === null || t.trend === 0) {
+      parts.push('学习上你保持着稳定的节奏' + (t.lastAvg !== null ? '，各科成绩均衡，均分维持在 ' + Math.round(t.lastAvg) + ' 分左右' : '') + '。');
+    } else if (t.trend > 0) {
+      parts.push('值得表扬的是，你本学期进步明显，班级排名前进了 ' + t.trend + ' 名' + (t.bestSub ? '，' + t.bestSub + ' 表现尤为突出' : '') + '，这份努力大家都看在眼里。');
+    } else {
+      parts.push('老师注意到你最近的成绩有些波动，排名后退了 ' + Math.abs(t.trend) + ' 名' + (t.worstSub ? '，' + t.worstSub + ' 需要重点补一补' : '') + '。别灰心，及时调整方法，你完全有能力赶上来。');
+    }
+
+    if (t.awards >= 2 || t.contest) {
+      parts.push((t.contest ? '你在竞赛中为班级争得了荣誉，' : '') + '本学期你获得 ' + t.awards + ' 次表扬，' + g + '的积极与担当是同学们的榜样。');
+    } else if (t.vio >= 2) {
+      parts.push('不过老师也希望你约束好自己，本学期有 ' + t.vio + ' 次违纪记录，纪律是学习的前提，相信你能管好自己。');
+    } else if (t.awards === 1) {
+      parts.push('本学期你有过一次亮眼的表扬记录，希望这样的时刻越来越多。');
+    }
+
+    if (t.absent + t.late >= 2) {
+      parts.push('另外，你本学期有 ' + (t.late ? '迟到 ' + t.late + ' 次' : '') + (t.absent ? (t.late ? '、' : '') + '缺勤 ' + t.absent + ' 次' : '') + '，按时到校是最基本的习惯，下学期要注意。');
+    } else if (t.awards + t.vio === 0) {
+      parts.push('你遵守纪律、出勤良好，继续保持这样的自律。');
+    }
+
+    parts.push(pick([
+      '新的学期，希望你敢于举手表达，把想法大声说出来',
+      '愿你保持好奇心，在喜欢的领域再深挖一步',
+      '希望你把细心养成习惯，让实力配得上你的潜力',
+      '愿你继续踏实前行，也学会劳逸结合、照顾好自己',
+      '期待新学期看到一个更大胆、更自信的你',
+      '希望你带动身边的同学一起进步，做小组里的「小老师」'
+    ], key + 'c') + '。');
+
+    return parts.join('');
+  }
+
+  function vComments() {
+    var act = activeStudents();
+    var savedN = act.filter(function (s) {
+      var r = (S.savedComments || []).find(function (x) { return x.sid === s.id; });
+      return r && r.text;
+    }).length;
+
+    var h = '<div class="toolbar">' +
+      '<button class="btn" data-act="rerollAll">全班换一版</button>' +
+      '<button class="btn" data-act="exportComments">导出 CSV</button>' +
+      '<button class="btn" data-act="printView">打印评语表</button>' +
+      '<div class="spacer"></div><span class="small muted">已定稿 ' + savedN + '/' + act.length + ' 人</span></div>';
+
+    h += '<div class="print-title">' + esc(S.settings.className) + ' 期末评语（' + U.dstr() + '）</div>';
+    h += '<div class="note mb16"><span><b>本地智能生成：</b>系统根据每位学生的成绩走势、考勤、表扬违纪记录，自动组合出差异化的评语草稿——<u>全程在本机完成，不联网、不上传学生数据</u>。生成后你可以逐人修改，点「定稿」保存。对某位学生不满意时点「换一版」。</span></div>';
+
+    h += act.map(function (s) {
+      var rec = (S.savedComments || []).find(function (x) { return x.sid === s.id; });
+      var draft = rec && rec.text ? rec.text : genComment(s.id, ui.commentsSeed + ((S.commentSeeds || {})[s.id] || 0));
+      var t = stuSnapshot(s.id);
+      var trendBadge = t.trend > 0 ? '<span class="bdg green">↑' + t.trend + ' 名</span>' :
+        t.trend < 0 ? '<span class="bdg red">↓' + Math.abs(t.trend) + ' 名</span>' :
+        '<span class="bdg line">成绩稳定</span>';
+      return '<div class="card mb16" style="page-break-inside:avoid"><div class="card-head"><h3>' + esc(s.name) + '</h3>' + trendBadge +
+        (rec && rec.text ? '<span class="bdg green">已定稿</span>' : '<span class="bdg amber">草稿</span>') +
+        '<div class="right"><span class="small muted">' + esc(s.no) + ' · ' + esc(s.gender) + ' · 第' + s.group + '组</span></div></div>' +
+        '<div class="card-body">' +
+        '<textarea class="ta" data-cmt="' + s.id + '" style="min-height:96px;line-height:1.8">' + esc(draft) + '</textarea>' +
+        '<div class="right mt8 no-print">' +
+        '<button class="btn xs ghost" data-act="rerollOne" data-id="' + s.id + '">换一版</button>' +
+        '<button class="btn xs ghost" data-act="copyComment" data-id="' + s.id + '">复制</button>' +
+        '<button class="btn xs primary" data-act="saveComment" data-id="' + s.id + '">定稿保存</button>' +
+        '</div></div></div>';
+    }).join('');
+    return h;
+  }
+
   /* ================= 视图索引 ================= */
   var VIEWS = {
     dashboard: vDashboard, students: vStudents, seats: vSeats, groups: vGroups,
     attendance: vAttendance, points: vPoints, fees: vFees, scores: vScores,
-    teach: vTeach, notices: vNotices, comms: vComms, records: vRecords, backup: vBackup
+    teach: vTeach, mistakes: vMistakes, comments: vComments,
+    notices: vNotices, comms: vComms, records: vRecords, backup: vBackup
   };
 
   var AFTER = {
@@ -1152,6 +1376,9 @@
         S[t] = S[t].filter(function (x) { return (x.id !== ds.id && x.sid !== ds.id); });
       });
       S.scores = S.scores.filter(function (x) { return x.sid !== ds.id; });
+      S.mistakes = (S.mistakes || []).filter(function (x) { return x.sid !== ds.id; });
+      S.savedComments = (S.savedComments || []).filter(function (x) { return x.sid !== ds.id; });
+      if (S.commentSeeds) delete S.commentSeeds[ds.id];
       S.feeMembers = (S.feeMembers || []).filter(function (x) { return x.sid !== ds.id; });
       save(true); render(); toast('已删除', 'ok');
     });
@@ -1189,8 +1416,57 @@
     openModal({
       title: '学生档案', cls: 'wide', body: body,
       footer: '<button class="btn" data-act="closeModal">关闭</button>' +
+        '<button class="btn" data-act="exportProfile" data-id="' + ds.id + '">打印 / 存档</button>' +
         '<button class="btn primary" data-act="editStudent" data-id="' + ds.id + '">编辑资料</button>'
     });
+  };
+  ACT.exportProfile = function (ds) {
+    var s = stu(ds.id);
+    var dsList = S.discipline.filter(function (d) { return d.sid === ds.id; }).sort(byDateDesc);
+    var ats = S.attendance.filter(function (a) { return a.sid === ds.id; }).sort(byDateDesc);
+    var e = curExam();
+    var rk = e ? examRanking(e.id).find(function (x) { return x.sid === ds.id; }) : null;
+    var typeName2 = { leave: '请假', absent: '缺勤', late: '迟到', early: '早退' };
+    var typeDn = { award: '表扬', violation: '违纪', talk: '谈心', contest: '竞赛' };
+    var rows2 = [];
+    rows2.push('<tr><th style="width:90px">学号</th><td>' + esc(s.no) + '</td><th style="width:90px">姓名</th><td>' + esc(s.name) + '</td></tr>');
+    rows2.push('<tr><th>性别</th><td>' + esc(s.gender) + '</td><th>分组</th><td>第 ' + s.group + ' 组</td></tr>');
+    rows2.push('<tr><th>家长</th><td>' + esc(s.parent || '—') + '</td><th>家长电话</th><td>' + esc(s.parentPhone || '—') + '</td></tr>');
+    rows2.push('<tr><th>宿舍</th><td>' + esc(s.dorm || '—') + '</td><th>积分 / 红花</th><td>' + pointsOf(s.id) + ' 分 · ' + awardCount(s.id) + ' 朵</td></tr>');
+    if (e) rows2.push('<tr><th>最近成绩</th><td colspan="3">' + esc(e.name) + '：总分 ' + (totalOf(e.id, s.id) === null ? '未录入' : totalOf(e.id, s.id)) + (rk ? ' · 班级第 ' + rk.rank + ' 名' : '') + '</td></tr>');
+    if (s.tags && s.tags.length) rows2.push('<tr><th>标签</th><td colspan="3">' + esc(s.tags.join('、')) + '</td></tr>');
+
+    var w = window.open('', '_blank');
+    if (!w) { toast('浏览器拦截了新窗口，请允许弹出窗口后重试', 'err'); return; }
+    w.document.write('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>' + esc(s.name) + ' · 学生档案</title>' +
+      '<style>body{font-family:"Microsoft YaHei",sans-serif;color:#1c2333;max-width:760px;margin:32px auto;padding:0 20px}' +
+      'h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;margin:26px 0 8px;border-left:4px solid #2563eb;padding-left:8px}' +
+      '.meta{color:#6b7280;font-size:13px;margin-bottom:18px}table{border-collapse:collapse;width:100%;font-size:13.5px}' +
+      'th,td{border:1px solid #d9dee8;padding:7px 10px;text-align:left}th{background:#f3f6fb;width:90px}' +
+      'ul{margin:0;padding-left:18px;font-size:13.5px;line-height:1.9}li span{color:#6b7280}' +
+      '@media print{body{margin:0}}</style></head><body>' +
+      '<h1>' + esc(S.settings.className || '') + ' 学生档案</h1>' +
+      '<div class="meta">' + esc(S.settings.school || '') + ' · 记录截至 ' + U.fmtCn(todayStr()) + ' · 导出人：' + esc(S.settings.teacher || '班主任') + '</div>' +
+      '<table><tbody>' + rows2.join('') + '</tbody></table>' +
+      '<h2>历次考试成绩</h2><ul>' +
+      (S.exams.length ? S.exams.map(function (ex) {
+        var r = examRanking(ex.id).find(function (x) { return x.sid === ds.id; });
+        return '<li>' + esc(ex.name) + '：<b>' + (r ? '第 ' + r.rank + ' 名 / ' + r.total + ' 分' : '未录入') + '</b></li>';
+      }).join('') : '<li>暂无考试数据</li>') + '</ul>' +
+      '<h2>考勤记录（' + ats.length + ' 条）</h2><ul>' +
+      (ats.length ? ats.map(function (a) {
+        return '<li>' + U.fmtCn(a.date) + ' ' + typeName2[a.type] + (a.reason ? '<span> · ' + esc(a.reason) + '</span>' : '') + '</li>';
+      }).join('') : '<li>无异常记录</li>') + '</ul>' +
+      '<h2>成长记录（' + dsList.length + ' 条）</h2><ul>' +
+      (dsList.length ? dsList.map(function (d) {
+        return '<li>' + U.fmtCn(d.date) + '【' + typeDn[d.type] + '】' + esc(d.title) +
+          (d.points ? '<span> · ' + (d.points > 0 ? '+' : '') + d.points + ' 分</span>' : '') +
+          (d.note ? '<br><span>' + esc(d.note) + '</span>' : '') + '</li>';
+      }).join('') : '<li>暂无</li>') + '</ul>' +
+      '<p style="margin-top:28px;font-size:12px;color:#9aa3b2">本档案由班主任工作台本地生成，数据仅存于教师本机浏览器。打印后可另存为 PDF 或用于家访、约谈材料。</p>' +
+      '<script>window.onload=function(){setTimeout(function(){window.print()},350)}<\/script>' +
+      '</body></html>');
+    w.document.close();
   };
   ACT.importStudents = function () {
     openModal({
@@ -1301,6 +1577,63 @@
     S.students.forEach(function (s) { s.row = undefined; s.col = undefined; });
     save(true); render(); toast('座位已清空', 'ok');
   };
+  function assignSeats(order) {
+    var cols = S.settings.seatCols || 7, rows = S.settings.seatRows || 6;
+    order.forEach(function (s, i) {
+      if (i < rows * cols) { s.row = Math.floor(i / cols); s.col = i % cols; }
+      else { s.row = undefined; s.col = undefined; }
+    });
+  }
+  ACT.seatGender = function () {
+    var act = activeStudents().slice().sort(function (a, b) { return (parseInt(a.no) || 0) - (parseInt(b.no) || 0); });
+    var boys = act.filter(function (s) { return s.gender === '男'; });
+    var girls = act.filter(function (s) { return s.gender !== '男'; });
+    var first = boys.length >= girls.length ? boys : girls;
+    var second = first === boys ? girls : boys;
+    var order = [], i = 0, j = 0;
+    while (i < first.length || j < second.length) {
+      if (i < first.length) order.push(first[i++]);
+      if (j < second.length) order.push(second[j++]);
+    }
+    assignSeats(order);
+    save(true); render(); toast('已按男女间隔排列', 'ok');
+  };
+  ACT.seatShift = function () {
+    openModal({
+      title: '整体平移', cls: 'narrow',
+      body: '<div class="note mb12"><span>全班座位整体移动，最后一排移出的学生进入「未排座」名单，第一排留出的位置为空。</span></div>' +
+        '<div style="display:grid;gap:9px">' +
+        '<button class="btn w100" data-act="doSeatShift" data-dir="fwd">整体前移一排</button>' +
+        '<button class="btn w100" data-act="doSeatShift" data-dir="back">整体后移一排</button></div>'
+    });
+  };
+  ACT.doSeatShift = function (ds) {
+    var rows = S.settings.seatRows || 6;
+    activeStudents().forEach(function (s) {
+      if (s.row === undefined || s.row === null) return;
+      var nr = ds.dir === 'fwd' ? s.row - 1 : s.row + 1;
+      if (nr < 0 || nr >= rows) { s.row = undefined; s.col = undefined; }
+      else s.row = nr;
+    });
+    save(true); closeModal(); render(); toast('已整体' + (ds.dir === 'fwd' ? '前' : '后') + '移一排', 'ok');
+  };
+  ACT.seatSpread = function () {
+    var act = activeStudents().slice().sort(function (a, b) { return (parseInt(a.no) || 0) - (parseInt(b.no) || 0); });
+    var tagged = act.filter(function (s) { return s.tags && s.tags.length; });
+    var untagged = act.filter(function (s) { return !(s.tags && s.tags.length); });
+    if (!tagged.length) return toast('没有学生带标签，先在学生档案里给个别学生加标签', 'err');
+    var total = act.length;
+    var order = new Array(total);
+    tagged.forEach(function (s, k) {
+      var pos = Math.min(total - 1, Math.round((k + 0.5) * total / tagged.length) - 1);
+      while (order[pos]) pos = (pos + 1) % total;
+      order[pos] = s;
+    });
+    var ui2 = 0;
+    for (var p = 0; p < total; p++) if (!order[p]) order[p] = untagged[ui2++];
+    assignSeats(order);
+    save(true); render(); toast('已按标签分散排座（' + tagged.length + ' 名标签学生均匀分布）', 'ok');
+  };
   ACT.regroup = function () {
     var act = activeStudents().slice().sort(function () { return Math.random() - 0.5; });
     var n = 6;
@@ -1326,6 +1659,24 @@
     var date = ui.attDate || todayStr();
     S.attendance = S.attendance.filter(function (a) { return a.date !== date; });
     save(true); render(); toast('已标记全班到齐', 'ok');
+  };
+  ACT.attMode = function (ds) { ui.attMode = ds.m; render(); };
+  ACT.seatAtt = function (ds) {
+    var cycle = ['present', 'leave', 'late', 'absent', 'early'];
+    var date = ui.attDate || todayStr();
+    var rec = S.attendance.find(function (a) { return a.date === date && a.sid === ds.id; });
+    var cur = rec ? rec.type : 'present';
+    var next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
+    if (next === 'present') {
+      if (rec) S.attendance = S.attendance.filter(function (a) { return a !== rec; });
+    } else if (rec) {
+      rec.type = next;
+      if (!rec.reason) rec.reason = '座位图登记';
+    } else {
+      S.attendance.push({ id: 'at' + Date.now().toString(36), date: date, sid: ds.id, type: next, reason: '座位图登记', noted: false });
+    }
+    save(true); render();
+    if (next !== 'present') toast(stu(ds.id).name + ' · ' + { leave: '请假', late: '迟到', absent: '缺勤', early: '早退' }[next]);
   };
 
   /* ----- 奖惩 ----- */
@@ -1400,6 +1751,29 @@
   ACT.markGraded = function (ds) {
     var hw = S.homework.find(function (x) { return x.id === ds.id; });
     if (hw) { hw.graded = hw.submitted.slice(); save(true); render(); toast('已标记全部批改', 'ok'); }
+  };
+  ACT.urgeHw = function (ds) {
+    var hw = S.homework.find(function (x) { return x.id === ds.id; });
+    if (!hw) return;
+    var missing = activeStudents().filter(function (s) { return hw.submitted.indexOf(s.id) === -1; });
+    var byGroup = {};
+    missing.forEach(function (s) { (byGroup[s.group] = byGroup[s.group] || []).push(s.name); });
+    var lines = Object.keys(byGroup).sort().map(function (g) { return '第 ' + g + ' 组：' + byGroup[g].join('、'); });
+    var text = '【作业催交提醒】\n' +
+      '各位家长好，' + U.fmtCn(hw.date) + '布置的' + hw.sub + '作业「' + hw.title + '」，' +
+      '目前还有 ' + missing.length + ' 位同学未提交：\n\n' + lines.join('\n') + '\n\n' +
+      '麻烦家长提醒孩子今天放学前补交，谢谢配合！\n—— ' + (S.settings.teacher || '班主任');
+    openModal({
+      title: '催交文案 · ' + hw.title, cls: 'wide',
+      body: '<div class="note mb12"><span>已按分组整理未交名单，点击下方按钮复制，直接粘贴到家长群 / 班级群即可。</span></div>' +
+        '<textarea class="ta" id="urgeTa" style="min-height:170px">' + esc(text) + '</textarea>',
+      footer: '<button class="btn" data-act="closeModal">关闭</button>' +
+        '<button class="btn primary" data-act="copyUrge">复制文案</button>'
+    });
+  };
+  ACT.copyUrge = function () {
+    var ta = $('#urgeTa');
+    if (ta) copyText(ta.value);
   };
   ACT.useTemplate = function (ds) {
     var t = S.templates.meetings.find(function (x) { return x.id === ds.id; });
@@ -1486,6 +1860,74 @@
   };
   ACT.printView = function () { window.print(); };
 
+  /* ----- 评语 ----- */
+  ACT.rerollAll = function () { ui.commentsSeed++; render(); toast('全班评语已重新生成一版', 'ok'); };
+  ACT.rerollOne = function (ds) {
+    S.commentSeeds = S.commentSeeds || {};
+    S.commentSeeds[ds.id] = (S.commentSeeds[ds.id] || 0) + 1;
+    var rec = (S.savedComments || []).find(function (x) { return x.sid === ds.id; });
+    if (rec) S.savedComments = S.savedComments.filter(function (x) { return x !== rec; });
+    save(false); render(); toast('已为 ' + stu(ds.id).name + ' 换一版', 'ok');
+  };
+  ACT.copyComment = function (ds) {
+    var ta = document.querySelector('[data-cmt="' + ds.id + '"]');
+    if (ta) copyText(ta.value.trim());
+  };
+  ACT.saveComment = function (ds) {
+    var ta = document.querySelector('[data-cmt="' + ds.id + '"]');
+    if (!ta) return;
+    var text = ta.value.trim();
+    if (!text) return toast('评语内容为空', 'err');
+    S.savedComments = S.savedComments || [];
+    var rec = S.savedComments.find(function (x) { return x.sid === ds.id; });
+    if (rec) { rec.text = text; rec.date = todayStr(); }
+    else S.savedComments.push({ sid: ds.id, text: text, date: todayStr() });
+    save(true); render(); toast('已定稿：' + stu(ds.id).name, 'ok');
+  };
+  ACT.exportComments = function () {
+    var head = ['学号', '姓名', '性别', '分组', '评语', '状态'];
+    var rows = activeStudents().map(function (s) {
+      var rec = (S.savedComments || []).find(function (x) { return x.sid === s.id; });
+      var text = rec && rec.text ? rec.text : genComment(s.id, ui.commentsSeed + ((S.commentSeeds || {})[s.id] || 0));
+      return [s.no, s.name, s.gender, '第' + s.group + '组', text, rec && rec.text ? '已定稿' : '草稿'];
+    });
+    downloadCSV([head].concat(rows), S.settings.className + '-期末评语');
+  };
+
+  /* ----- 错题本 ----- */
+  ACT.mistakeFilter = function (ds) { ui.mistakeFilter = ds.t; render(); };
+  ACT.addMistake = function () {
+    var act = activeStudents();
+    var subs = (curExam() ? curExam().subjects : U.SUBJECTS);
+    openModal({
+      title: '记一道错题',
+      body: '<form data-form="mistake"><div class="form-row three">' +
+        '<div class="field"><label>学生</label><select class="sel" name="sid">' + act.map(function (s) { return '<option value="' + s.id + '">' + esc(s.name) + '（' + s.no + '）</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>科目</label><select class="sel" name="sub">' + subs.map(function (x) { return '<option>' + esc(x) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>日期</label><input class="inp" type="date" name="date" value="' + todayStr() + '"></div></div>' +
+        '<div class="field mt12"><label>题目 / 问题描述</label><textarea class="ta" name="desc" style="min-height:80px" placeholder="如：二次函数顶点坐标公式代入错误" required></textarea></div>' +
+        '<div class="field mt12"><label>错因</label><select class="sel" name="cause"><option>概念理解偏差</option><option>计算粗心</option><option>审题不清</option><option>公式记错</option><option>步骤跳步</option><option>其他</option></select></div></form>',
+      footer: '<button class="btn" data-act="closeModal">取消</button><button class="btn primary" data-act="submitForm" data-form="mistake">保存</button>'
+    });
+  };
+  ACT.toggleSolved = function (ds) {
+    var m = S.mistakes.find(function (x) { return x.id === ds.id; });
+    if (m) { m.solved = !m.solved; save(true); render(); toast(m.solved ? '已标记掌握' : '恢复为待订正', 'ok'); }
+  };
+  ACT.delMistake = function (ds) {
+    confirmBox('删除错题', '确定删除这条错题记录吗？', function () {
+      S.mistakes = S.mistakes.filter(function (x) { return x.id !== ds.id; });
+      save(true); render();
+    });
+  };
+  ACT.exportMistakes = function () {
+    var head = ['日期', '学号', '姓名', '科目', '题目/问题', '错因', '状态'];
+    var rows = S.mistakes.slice().sort(byDateDesc).map(function (m) {
+      return [m.date, stu(m.sid).no, stu(m.sid).name, m.sub, m.desc.replace(/\n/g, ' '), m.cause || '', m.solved ? '已掌握' : '待订正'];
+    });
+    downloadCSV([head].concat(rows), S.settings.className + '-错题本');
+  };
+
   /* ----- 备份 ----- */
   ACT.exportJSON = function () {
     var blob = new Blob([Store.exportJSON()], { type: 'application/json' });
@@ -1526,6 +1968,21 @@
     };
     reader.readAsText(f, 'utf-8');
     input.value = '';
+  }
+
+  /* ================= 复制到剪贴板 ================= */
+  function copyText(t) {
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); toast('已复制，可直接粘贴', 'ok'); }
+      catch (e) { toast('复制失败，请长按文本手动复制', 'err'); }
+      ta.remove();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { toast('已复制，可直接粘贴', 'ok'); }, fallback);
+    } else fallback();
   }
 
   /* ================= CSV 下载 ================= */
@@ -1684,6 +2141,12 @@
       save(true); closeModal(); render(); toast('已保存留痕', 'ok');
     }
 
+    if (kind === 'mistake') {
+      S.mistakes = S.mistakes || [];
+      S.mistakes.push({ id: 'mk' + Date.now().toString(36), date: g('date'), sid: g('sid'), sub: g('sub'), desc: g('desc'), cause: g('cause'), solved: false });
+      save(true); closeModal(); render(); toast('错题已记录', 'ok');
+    }
+
     if (kind === 'settings') {
       S.settings.className = g('className');
       S.settings.teacher = g('teacher');
@@ -1702,6 +2165,9 @@
     if (!S.settings) S.settings = {};
     if (S.settings.pointThreshold === undefined) S.settings.pointThreshold = 0;
     if (!S.periods) S.periods = ['第1节 08:00', '第2节 08:55', '第3节 10:00', '第4节 10:55', '第5节 14:00', '第6节 14:55', '第7节 16:00'];
+    if (!S.mistakes) S.mistakes = [];
+    if (!S.savedComments) S.savedComments = [];
+    if (!S.commentSeeds) S.commentSeeds = {};
     if (!S.templates) S.templates = { meetings: [], comments: [] };
     Store.onSave = function () {
       var d = new Date();

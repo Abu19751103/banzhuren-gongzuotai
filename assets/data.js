@@ -114,6 +114,9 @@
       comms: [],
       records: [],
       homework: [],
+      mistakes: [],
+      savedComments: [],
+      commentSeeds: {},
       timetable: [],
       templates: { meetings: [], comments: [] }
     };
@@ -293,6 +296,27 @@
       return { sid: s.id, paid: rng() < 0.9, amount: 100 };
     });
 
+    /* ---- 错题本（演示） ---- */
+    var mkCause = ['概念理解偏差', '计算粗心', '审题不清', '公式记错', '步骤跳步'];
+    var mkDesc = [
+      '集合 {1,2,3} 的真子集个数判断错误',
+      '函数单调性证明缺少定义域讨论',
+      '阅读理解概括段意漏掉转折关系',
+      '受力分析漏画摩擦力',
+      '化学方程式未配平',
+      '英语时态：一般过去时误用完成时'
+    ];
+    st.mistakes = [];
+    for (var m = 0; m < 6; m++) {
+      var ms = st.students[Math.floor(rng() * st.students.length)];
+      st.mistakes.push({
+        id: 'mk' + (m + 1), date: shift(-Math.floor(rng() * 14) - 1),
+        sid: ms.id, sub: SUBJECTS[m % SUBJECTS.length],
+        desc: mkDesc[m], cause: mkCause[Math.floor(rng() * mkCause.length)],
+        solved: m < 2
+      });
+    }
+
     /* ---- 模板库 ---- */
     st.templates.meetings = [
       { id: 'm1', title: '期中考试动员班会', body: '一、回顾上月班级情况\n二、明确期中目标与个人目标卡\n三、复习方法与时间管理建议\n四、签署诚信考试承诺书' },
@@ -359,6 +383,9 @@
       blank.comms = [];
       blank.records = [];
       blank.homework = [];
+      blank.mistakes = [];
+      blank.savedComments = [];
+      blank.commentSeeds = {};
       blank.timetable = [[], [], [], [], []];
       this.state = blank;
       this.save(true);
