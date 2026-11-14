@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>班主任工作台 · 班级管理中枢</title>
+<meta name="theme-color" content="#101b2d">
+<meta name="description" content="面向班主任的一体化班级管理中枢：学生档案、考勤、奖惩积分、座位值日、成绩分析、家校沟通、工作留痕，数据本地保存。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3E班%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">班</div>
+      <div class="brand-txt">
+        <b>班主任工作台</b>
+        <span id="brandClass">班级管理中枢</span>
+      </div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="sidebar-foot">
+      <div class="save-state"><i class="dot" id="saveDot"></i><span id="saveState">数据保存在本机</span></div>
+      <div class="foot-tip">换设备请用「数据备份」导出迁移</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn only-mobile" data-act="toggleNav" aria-label="菜单">☰</button>
+      <div class="page-head">
+        <h1 id="pageTitle">仪表盘</h1>
+        <p id="pageSub"></p>
+      </div>
+      <div class="topbar-right">
+        <div class="term-pill" id="termPill"></div>
+        <button class="btn ghost" data-act="quickAdd">＋ 快速登记</button>
+      </div>
+    </header>
+    <main class="view" id="view"></main>
+  </div>
+</div>
+
+<div id="navMask" class="nav-mask" data-act="toggleNav"></div>
+<div id="modalRoot"></div>
+<div id="toastRoot" class="toast-root"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/charts.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
